@@ -4,6 +4,9 @@ using System.Linq;
 using System.Text;
 using System.Transactions;
 using System.Data.SqlClient;
+using System.Data.SqlTypes;
+using System.IO;
+using System.Diagnostics;
 
 namespace Database_Communication
 {
@@ -94,7 +97,7 @@ namespace Database_Communication
             Console.WriteLine("Save Video =========== \n\n");
             Console.Write("Enter Video File path :");
             path = Console.ReadLine();
-            Console.Write("Enter Video Name :");
+            Console.Write("Enter Video Name in Database :");
             video_name = Console.ReadLine();
             Console.Write("Saving Video ...");
 
@@ -106,7 +109,8 @@ namespace Database_Communication
                     command.Connection = sqlConnection;
                     command.CommandType = System.Data.CommandType.Text;
                     command.CommandText = "Insert Into VideoTable([Description],[FileData]) Values(@video_name, (select* from openrowset(bulk '" + path + "', single_blob) as varbinary(max)))";
-                    command.Parameters.AddWithValue("@video_name", video_name);
+                    FileInfo f = new FileInfo(path);
+                    command.Parameters.AddWithValue("@video_name", video_name+f.Extension);
 
                     try
                     {
@@ -127,10 +131,60 @@ namespace Database_Communication
 
         }
 
-        private static void play_video(string name)
+        private static void play_video()
         {
 
+            string video_name;
 
+            Console.WriteLine("Play Video ========== \n\n");
+
+            list_video();
+            Console.Write("Insert Video Name : ");
+            video_name = Console.ReadLine();
+            Console.Write("Retrieving Video ...");
+            using (TransactionScope transactionScope = new TransactionScope())
+            {
+                SqlConnection sqlConnection = connect_database();
+                using (SqlCommand command = new SqlCommand())
+                {
+                    command.Connection = sqlConnection;
+                    command.CommandType = System.Data.CommandType.Text;
+                    command.CommandText = String.Format("SELECT FileData.PathName() As Path, GET_FILESTREAM_TRANSACTION_CONTEXT() As TransactionContext FROM {0} WHERE description=@video_name", table_name);
+                    command.Parameters.AddWithValue("@video_name", video_name);
+
+                    try
+                    {
+                        SqlDataReader reader = command.ExecuteReader();
+                        while (reader.Read()) {
+                            string filePath = (string) reader["Path"];
+                            byte[] transactionContext = (byte[]) reader["TransactionContext"];
+                            SqlFileStream sqlFileStream = new SqlFileStream(filePath,transactionContext,FileAccess.Read);
+                            byte[] video_data = new byte[sqlFileStream.Length];
+                            sqlFileStream.Read(video_data,0,Convert.ToInt32(sqlFileStream.Length));
+                            sqlFileStream.Close();
+
+                            string filename = @"D:\Project\Smart Motion Detection\Database Systems\Program\temp\"+video_name+".wmv";
+                            FileStream fs = new FileStream(filename,FileMode.Create,FileAccess.Write,FileShare.Write);
+                            fs.Write(video_data,0,video_data.Length);
+                            fs.Flush();
+                            fs.Close();
+                            Console.WriteLine("Successfull");
+
+                            Console.Write("Playing Video ...");
+                            Process process = new Process();
+                            process.StartInfo.FileName = filename;
+                            process.Start();
+
+                        }
+                    }
+                    catch (Exception e)
+                    {
+                        Console.WriteLine("{0}", e);
+                    }
+                    disconnect_database(sqlConnection);
+                    transactionScope.Complete();
+                }
+            }
 
         }
 
@@ -161,10 +215,7 @@ namespace Database_Communication
                         save_video();
                         break;
                     case "3":
-                        list_video();
-                        Console.WriteLine("Input video name :");
-                        string video_name = Console.ReadLine();
-                        play_video(video_name);
+                        play_video();
                         break;
                 }
             }
