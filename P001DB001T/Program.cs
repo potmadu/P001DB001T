@@ -66,7 +66,7 @@ namespace Database_Communication
 
                     command.Connection = sqlConnection;
                     command.CommandType = System.Data.CommandType.Text;
-                    command.CommandText = String.Format("SELECT * FROM {0}", table_name);
+                    command.CommandText = String.Format("SELECT PkId,Id,Description FROM {0}", table_name);
 
                     try
                     {
@@ -136,7 +136,7 @@ namespace Database_Communication
 
             string video_name;
 
-            Console.WriteLine("Play Video ========== \n\n");
+            Console.WriteLine("Play Video ==========");
 
             list_video();
             Console.Write("Insert Video Name : ");
